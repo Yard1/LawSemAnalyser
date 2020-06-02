@@ -1,0 +1,4 @@
+temp/**
+out/**
+*.pyc
+*.code-workspace
