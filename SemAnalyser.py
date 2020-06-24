@@ -21,6 +21,7 @@ from pprint import pprint
 from typing import Generator
 from enum import Enum, auto
 from pathlib import Path
+import shutil
 
 import json
 import subprocess
@@ -39,14 +40,17 @@ class SemAnalyser(object):
         self.json_output_path = json_output_path
         self.liner2_output_path = liner2_output_path
         self.docker_image = docker_image
-        if not os.path.exists(self.temp_path):
-            os.makedirs(self.temp_path)
         if not os.path.exists(self.output_path):
             os.makedirs(self.output_path)
         if not os.path.exists(self.json_output_path):
             os.makedirs(self.json_output_path)
-        if not os.path.exists(self.liner2_output_path):
-            os.makedirs(self.liner2_output_path)
+
+        if os.path.exists(self.temp_path):
+            shutil.rmtree(self.temp_path)
+        os.makedirs(self.temp_path)
+        if os.path.exists(self.liner2_output_path):
+            shutil.rmtree(self.liner2_output_path)
+        os.makedirs(self.liner2_output_path)
         self.docker_client = docker.from_env()
         self.docker_client.images.pull(docker_image)
 
@@ -94,7 +98,7 @@ class SemAnalyser(object):
 
     def _prepare_liner2_input(self):
         for filename, data in self.html_data.items():
-            print(f"Running liner2 on {filename}...")
+            print(f"Preparing {filename} for liner2...")
             data = data.result["document"]
             for element in tqdm(data["elements"] + data["references"]):
                 if "subelements" in element:
@@ -122,7 +126,6 @@ class SemAnalyser(object):
                 print(f"{name} doesn't match any html file")
                 continue
             element_name = name.replace(current_html_file, "", 1)[1:-9].split(".")
-            print(element_name)
             if len(element_name) > 2:
                 subelement_name = (element_name[2], element_name[3])
                 element_name = (element_name[0], element_name[1])
