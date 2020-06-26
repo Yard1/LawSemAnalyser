@@ -137,15 +137,22 @@ class SemAnalyser(object):
             f.write(re.sub(r"_REP_\w+", "", text.strip()).strip())
 
     def _append_liner2_output(self, element, liner2_output):
-        if "liner2" in element:
-            element["liner2"]["annotations"].extend(liner2_output["annotations"])
-            if element["liner2"]["annotations"]:
-                element["liner2"]["annotations"].sort(
-                    key=lambda x: int(x["tokens"][0][1:])
-                )
-                for i, x in enumerate(element["liner2"]["annotations"]):
-                    x["id"] = f"a{i+1}"
-        else:
+        try:
+            if (
+                "liner2" in element
+                and element["liner2"]
+                and "annotations" in element["liner2"]
+            ):
+                element["liner2"]["annotations"].extend(liner2_output["annotations"])
+                if element["liner2"]["annotations"]:
+                    element["liner2"]["annotations"].sort(
+                        key=lambda x: int(x["tokens"][0][1:])
+                    )
+                    for i, x in enumerate(element["liner2"]["annotations"]):
+                        x["id"] = f"a{i+1}"
+            else:
+                element["liner2"] = liner2_output.copy()
+        except:
             element["liner2"] = liner2_output.copy()
 
     def _load_liner2_output(self):
