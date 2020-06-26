@@ -59,15 +59,15 @@ class SemAnalyser(object):
         if os.path.exists(self.temp_path):
             shutil.rmtree(self.temp_path)
         os.makedirs(self.temp_path)
-        if os.path.exists(self.liner2_output_path):
-            shutil.rmtree(self.liner2_output_path)
-        os.makedirs(self.liner2_output_path)
+        # if os.path.exists(self.liner2_output_path):
+        #    shutil.rmtree(self.liner2_output_path)
+        # os.makedirs(self.liner2_output_path)
         self.docker_client = docker.from_env()
         # self.docker_client.images.pull(docker_image)
 
     def analyseDocs(self):
         self._prepare_docs()
-        self._run_liner2()
+        # self._run_liner2()
         self._load_liner2_output()
         self._save_txt_files()
 
@@ -122,12 +122,6 @@ class SemAnalyser(object):
             print(f"Preparing {filename} for liner2...")
             data = data.result["document"]
             for element in tqdm(data["elements"] + data["references"]):
-                if "subelements" in element:
-                    for subelement in element["subelements"]:
-                        subelement["liner2"] = self._save_text_for_liner2(
-                            subelement["content"],
-                            f"{filename}.{element['type']}.{element['id']}.{subelement['type']}.{subelement['id']}",
-                        )
                 element["liner2"] = self._save_text_for_liner2(
                     element["content"], f"{filename}.{element['type']}.{element['id']}"
                 )
@@ -169,8 +163,10 @@ class SemAnalyser(object):
                 print(f"{name} doesn't match any html file")
                 continue
             element_name = name.replace(current_html_file, "", 1)[1:-9].split(".")
-            if len(element_name) > 2:
-                subelement_name = (element_name[2], element_name[3])
+            try:
+                int(element_name[2])
+                element_name = (element_name[0], f"{element_name[1]}.{element_name[2]}")
+            except:
                 element_name = (element_name[0], element_name[1])
             elements = self.html_data[current_html_file].result["document"]["elements"]
             references = self.html_data[current_html_file].result["document"][
@@ -185,32 +181,7 @@ class SemAnalyser(object):
                 None,
             )
             if element:
-                if "subelements" in element:
-                    subelement = next(
-                        (
-                            x
-                            for x in element["subelements"]
-                            if x["type"] == subelement_name[0]
-                            and str(x["id"]) == subelement_name[1]
-                        ),
-                        None,
-                    )
-                    if subelement:
-                        self._append_liner2_output(subelement, liner2_output)
-                else:
-                    self._append_liner2_output(element, liner2_output)
-            else:
-                element = next(
-                    (
-                        x
-                        for x in elements + references
-                        if x["type"] == element_name[0]
-                        and str(x["id"]) == element_name[1]
-                    ),
-                    None,
-                )
-                if element:
-                    self._append_liner2_output(element, liner2_output)
+                self._append_liner2_output(element, liner2_output)
 
     def _run_liner2(self):
         self._prepare_liner2_input()

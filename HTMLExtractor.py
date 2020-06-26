@@ -35,7 +35,7 @@ class HTMLExtractor(object):
 
     PATTERN_EU_DOC = re.compile(r"href\s*=\s*\".*?eur-lex\.europa\.eu")
 
-    TEMPLATES = ["title", "chapter", "subchapter", "article", "ref"]
+    TEMPLATES = ["title", "introduction", "chapter", "subchapter", "article", "ref"]
 
     BAD_CHARS_TO_REPLACE = {
         "\u00ab": '"',  # left-pointing double angle quotation mark
@@ -322,94 +322,91 @@ class HTMLExtractor(object):
             for child in self.soup.recursiveChildGenerator():
                 just_text = self.extractor._clean_html(child)
                 attrs = getattr(child, "attrs", None)
-                if child.parent == soup or (
-                    child.parent.parent == soup and child.parent.name == "div"
-                ):
-                    if attrs and "class" in attrs:
-                        if "doc-ti" in attrs["class"] and not current_name == "title":
-                            current_name = "title"
-                            element = {
-                                "type": current_name,
-                                "id": 0,
-                                "content": current_element,
-                                "refs": [],
-                            }
-                            elements.append(element)
-                        elif (
-                            not title_done
-                            and "normal" in attrs["class"]
-                            and not current_name == "INTRODUCTION"
-                        ):
-                            current_name = "introduction"
-                            element = {
-                                "type": current_name,
-                                "id": 0,
-                                "content": current_element,
-                                "refs": [],
-                            }
-                            elements.append(element)
-                            title_done = True
-                        elif "ti-section-1" in attrs["class"]:
-                            current_element = []
-                            if re.match(r"TYTUŁ .*", just_text, re.IGNORECASE):
-                                current_name = "chapter"
-                                element = {
-                                    "type": current_name,
-                                    "id": template_counters[current_name],
-                                    "content": current_element,
-                                    "refs": [],
-                                    "subelements": [],
-                                }
-                                last_chapter = element
-                                elements.append(element)
-                            else:
-                                current_name = "subchapter"
-                                if last_chapter["subelements"]:
-                                    current_id = (
-                                        last_chapter["subelements"][-1]["id"] + 1
-                                    )
-                                else:
-                                    current_id = 1
-                                element = {
-                                    "type": current_name,
-                                    "id": current_id,
-                                    "content": current_element,
-                                    "refs": [],
-                                }
-                                last_chapter["subelements"].append(element)
-                            template_counters[current_name] += 1
-                        elif "ti-art" in attrs["class"]:
-                            current_name = "article"
-                            current_element = []
-                            element = {
-                                "type": current_name,
-                                "id": template_counters[current_name],
-                                "content": current_element,
-                                "refs": [],
-                            }
-                            elements.append(element)
-                            template_counters[current_name] += 1
-                        elif child.name == "p" and "note" in attrs["class"]:
-                            current_name = "ref"
-                            current_element = []
-                            element = {
-                                "type": current_name,
-                                "id": template_counters[current_name],
-                                "content": current_element,
-                                "links": [],
-                            }
-                            references.append(element)
-                            template_counters[current_name] += 1
-                    current_element.append(child)
-                    if current_name == "ref" and not isinstance(child, NavigableString):
+                if child.name == "p" and attrs and "class" in attrs:
+                    if "doc-ti" in attrs["class"] and not current_name == "title":
+                        current_name = "title"
                         current_element = []
-                        references[-1]["links"].append(current_element)
-                        links = [
-                            getattr(x, "attrs", None)["href"]
-                            for x in child.find_all("a")
-                        ][-1:]
-                        if len(links) > 0:
-                            current_element.extend(links)
+                        element = {
+                            "type": current_name,
+                            "id": 0,
+                            "content": current_element,
+                            "refs": [],
+                        }
+                        elements.append(element)
+                    elif (
+                        not title_done
+                        and "normal" in attrs["class"]
+                        and not current_name == "introduction"
+                    ):
+                        current_name = "introduction"
+                        current_element = []
+                        element = {
+                            "type": current_name,
+                            "id": 0,
+                            "content": current_element,
+                            "refs": [],
+                        }
+                        elements.append(element)
+                        title_done = True
+                    elif "ti-section-1" in attrs["class"]:
+                        if re.match(r"TYTUŁ .*", just_text, re.IGNORECASE):
+                            current_name = "chapter"
+                            current_element = []
+                            element = {
+                                "type": current_name,
+                                "id": template_counters[current_name],
+                                "content": current_element,
+                                "refs": [],
+                            }
+                            last_chapter = element
+                            last_id = 1
+                            elements.append(element)
+                            template_counters[current_name] += 1
+                        else:
+                            current_name = "subchapter"
+                            current_element = []
+                            current_id = last_id
+                            last_id += 1
+                            last_chapter_id = last_chapter["id"]
+                            element = {
+                                "type": current_name,
+                                "id": f"{last_chapter_id}.{current_id}",
+                                "content": current_element,
+                                "refs": [],
+                            }
+                            elements.append(element)
+                            template_counters[current_name] += 1
+                    elif "ti-art" in attrs["class"]:
+                        current_name = "article"
+                        current_element = []
+                        element = {
+                            "type": current_name,
+                            "id": template_counters[current_name],
+                            "content": current_element,
+                            "refs": [],
+                        }
+                        elements.append(element)
+                        template_counters[current_name] += 1
+                    elif child.name == "p" and "note" in attrs["class"]:
+                        current_name = "ref"
+                        current_element = []
+                        element = {
+                            "type": current_name,
+                            "id": template_counters[current_name],
+                            "content": current_element,
+                            "links": [],
+                        }
+                        references.append(element)
+                        template_counters[current_name] += 1
+                    current_element.append(child)
+                if current_name == "ref" and not isinstance(child, NavigableString):
+                    current_element = []
+                    references[-1]["links"].append(current_element)
+                    links = [
+                        getattr(x, "attrs", None)["href"] for x in child.find_all("a")
+                    ][-1:]
+                    if len(links) > 0:
+                        current_element.extend(links)
                 if (
                     not current_name == "ref"
                     and attrs
