@@ -30,8 +30,19 @@ import docker
 
 from HTMLExtractor import HTMLExtractor
 
+
 class SemAnalyser(object):
-    def __init__(self, data_path: str, html_docs_path: str, html_extractor=HTMLExtractor(), temp_path='temp', output_path='out', json_output_path=os.path.join('out', 'json'), liner2_output_path=os.path.join('out', 'liner2'), docker_image='yard1/liner2-cli:latest'):
+    def __init__(
+        self,
+        data_path: str,
+        html_docs_path: str,
+        html_extractor=HTMLExtractor(),
+        temp_path="temp",
+        output_path="out",
+        json_output_path=os.path.join("out", "json"),
+        liner2_output_path=os.path.join("out", "liner2"),
+        docker_image="yard1/liner2-cli:latest",
+    ):
         self.data_path = data_path
         self.html_docs_path = html_docs_path
         self.html_extractor = html_extractor
@@ -52,7 +63,7 @@ class SemAnalyser(object):
             shutil.rmtree(self.liner2_output_path)
         os.makedirs(self.liner2_output_path)
         self.docker_client = docker.from_env()
-        self.docker_client.images.pull(docker_image)
+        # self.docker_client.images.pull(docker_image)
 
     def analyseDocs(self):
         self._prepare_docs()
@@ -68,10 +79,12 @@ class SemAnalyser(object):
 
     def _save_txt_files(self):
         for file_name, data in self.html_data.items():
-            path = os.path.join(self.data_path, "json", file_name + ".json")
+            path = os.path.join(self.json_output_path, file_name + ".json")
             print("Saving txt file " + path + "...")
-            with codecs.open(path, 'w', encoding="utf8") as output_file:
-                json.dump(data.result, output_file, ensure_ascii=False, separators=(',', ':'))
+            with codecs.open(path, "w", encoding="utf8") as output_file:
+                json.dump(
+                    data.result, output_file, ensure_ascii=False, separators=(",", ":")
+                )
 
     def _read_html_files(self) -> dict:
         html_files = {}
@@ -79,20 +92,28 @@ class SemAnalyser(object):
             print("Reading file " + os.path.join(self.html_docs_path, name) + "...")
             if os.path.isfile(os.path.join(self.html_docs_path, name)):
                 try:
-                    with codecs.open(os.path.join(self.html_docs_path, name), encoding="utf-8") as input_file:
-                        html_files[name] = BeautifulSoup(input_file, 'lxml')
+                    with codecs.open(
+                        os.path.join(self.html_docs_path, name), encoding="utf-8"
+                    ) as input_file:
+                        html_files[name] = BeautifulSoup(input_file, "lxml")
                 except UnicodeDecodeError:
-                    with codecs.open(os.path.join(self.html_docs_path, name), encoding="iso-8859-2") as input_file:
-                        html_files[name] = BeautifulSoup(input_file, 'lxml')
+                    with codecs.open(
+                        os.path.join(self.html_docs_path, name), encoding="iso-8859-2"
+                    ) as input_file:
+                        html_files[name] = BeautifulSoup(input_file, "lxml")
         return html_files
 
     def _extract_from_html(self) -> collections.defaultdict:
         data_collections = collections.defaultdict(collections.OrderedDict)
         for file_name in self.html_files:
-            print("Processing html file " +
-                  self.html_docs_path + "\\" + file_name + "...")
+            print(
+                "Processing html file "
+                + os.path.join(self.html_docs_path, file_name)
+                + "..."
+            )
             data_collections[file_name] = self.html_extractor.extract_html(
-                self.html_files[file_name])
+                self.html_files[file_name]
+            )
 
         return data_collections
 
@@ -104,13 +125,28 @@ class SemAnalyser(object):
                 if "subelements" in element:
                     for subelement in element["subelements"]:
                         subelement["liner2"] = self._save_text_for_liner2(
-                            subelement["content"], f"{filename}.{element['type']}.{element['id']}.{subelement['type']}.{subelement['id']}")
+                            subelement["content"],
+                            f"{filename}.{element['type']}.{element['id']}.{subelement['type']}.{subelement['id']}",
+                        )
                 element["liner2"] = self._save_text_for_liner2(
-                    element["content"], f"{filename}.{element['type']}.{element['id']}")
+                    element["content"], f"{filename}.{element['type']}.{element['id']}"
+                )
 
     def _save_text_for_liner2(self, text: str, filename: str):
-        with codecs.open(f'temp/{filename}.txt', 'w', encoding="utf8") as f:
+        with codecs.open(f"temp/{filename}.txt", "w", encoding="utf8") as f:
             f.write(re.sub(r"_REP_\w+", "", text.strip()).strip())
+
+    def _append_liner2_output(self, element, liner2_output):
+        if "liner2" in element:
+            element["liner2"]["annotations"].extend(liner2_output["annotations"])
+            if element["liner2"]["annotations"]:
+                element["liner2"]["annotations"].sort(
+                    key=lambda x: int(x["tokens"][0][1:])
+                )
+                for i, x in enumerate(element["liner2"]["annotations"]):
+                    x["id"] = f"a{i+1}"
+        else:
+            element["liner2"] = liner2_output.copy()
 
     def _load_liner2_output(self):
         for name in tqdm(sorted(os.listdir(self.liner2_output_path))):
@@ -130,30 +166,62 @@ class SemAnalyser(object):
                 subelement_name = (element_name[2], element_name[3])
                 element_name = (element_name[0], element_name[1])
             elements = self.html_data[current_html_file].result["document"]["elements"]
-            references = self.html_data[current_html_file].result["document"]["references"]
+            references = self.html_data[current_html_file].result["document"][
+                "references"
+            ]
             element = next(
-                (x for x in elements+references if x["type"] == element_name[0] and str(x["id"]) == element_name[1]), None)
+                (
+                    x
+                    for x in elements + references
+                    if x["type"] == element_name[0] and str(x["id"]) == element_name[1]
+                ),
+                None,
+            )
             if element:
                 if "subelements" in element:
                     subelement = next(
-                        (x for x in element["subelements"] if x["type"] == subelement_name[0] and str(x["id"]) == subelement_name[1]), None)
+                        (
+                            x
+                            for x in element["subelements"]
+                            if x["type"] == subelement_name[0]
+                            and str(x["id"]) == subelement_name[1]
+                        ),
+                        None,
+                    )
                     if subelement:
-                        subelement["liner2"] = liner2_output.copy()
+                        self._append_liner2_output(subelement, liner2_output)
                 else:
-                    element["liner2"] = liner2_output.copy()
+                    self._append_liner2_output(element, liner2_output)
             else:
                 element = next(
-                    (x for x in elements+references if x["type"] == element_name[0] and str(x["id"]) == element_name[1]), None)
+                    (
+                        x
+                        for x in elements + references
+                        if x["type"] == element_name[0]
+                        and str(x["id"]) == element_name[1]
+                    ),
+                    None,
+                )
                 if element:
-                    element["liner2"] = liner2_output.copy()
+                    self._append_liner2_output(element, liner2_output)
 
     def _run_liner2(self):
         self._prepare_liner2_input()
         print(f"Running Docker {self.docker_image}...")
-        self.docker_client.containers.run(self.docker_image, entrypoint="/liner2/liner2-batch.sh", userns_mode="host",
-                                          volumes={
-                                              f"{os.getcwd()}/{self.temp_path}": {"bind": "/liner2/input", "mode": "rw"},
-                                              f"{os.getcwd()}/{self.liner2_output_path}": {"bind": "/liner2/output", "mode": "rw"},
-                                              tempfile.gettempdir(): {"bind": "/tmp", "mode": "rw"}
-                                          }
-                                          )
+        self.docker_client.containers.run(
+            self.docker_image,
+            entrypoint="/liner2/liner2-batch.sh",
+            userns_mode="host",
+            volumes={
+                f"{os.getcwd()}/{self.temp_path}": {
+                    "bind": "/liner2/input",
+                    "mode": "rw",
+                },
+                f"{os.getcwd()}/{self.liner2_output_path}": {
+                    "bind": "/liner2/output",
+                    "mode": "rw",
+                },
+                tempfile.gettempdir(): {"bind": "/tmp", "mode": "rw"},
+            },
+        )
+        print(f"Done running Docker {self.docker_image}...")
