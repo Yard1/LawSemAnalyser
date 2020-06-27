@@ -1,4 +1,5 @@
-from SemAnalyser.SemAnalyser import SemAnalyser
+from LawSemAnalyser.SemAnalyser import SemAnalyser
 
-tt = SemAnalyser("out", "prawo_konsumenckie_html")
-tt.analyseDocs()
+# SemAnalyser("ścieżka/do/folderu/wyjściowego", "ścieżka/do/folderu/wejściowego")
+analyser = SemAnalyser("out", "prawo_konsumenckie_html")
+analyser.analyseDocs()

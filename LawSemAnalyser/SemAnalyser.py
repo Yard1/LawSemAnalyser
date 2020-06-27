@@ -10,7 +10,7 @@ import regex as re
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
-from HTMLExtractor import HTMLExtractor
+from .HTMLExtractor import HTMLExtractor
 
 
 class SemAnalyser(object):
@@ -103,14 +103,14 @@ class SemAnalyser(object):
         for filename, data in self.html_data.items():
             print(f"Preparing {filename} for liner2...")
             data = data.result["document"]
-            for element in tqdm(data["elements"] + data["references"]):
+            for element in tqdm(data["body"] + data["glossary"]):
                 element["liner2"] = self._save_text_for_liner2(
                     element["content"], f"{filename}.{element['type']}.{element['id']}"
                 )
 
     def _save_text_for_liner2(self, text: str, filename: str):
         with codecs.open(f"temp/{filename}.txt", "w", encoding="utf8") as f:
-            f.write(re.sub(r"_REP_\w+", "", text.strip()).strip())
+            f.write(text.strip())
 
     def _append_liner2_output(self, element: dict, liner2_output: dict):
         try:
@@ -150,14 +150,12 @@ class SemAnalyser(object):
                 element_name = (element_name[0], f"{element_name[1]}.{element_name[2]}")
             except:
                 element_name = (element_name[0], element_name[1])
-            elements = self.html_data[current_html_file].result["document"]["elements"]
-            references = self.html_data[current_html_file].result["document"][
-                "references"
-            ]
+            body = self.html_data[current_html_file].result["document"]["body"]
+            glossary = self.html_data[current_html_file].result["document"]["glossary"]
             element = next(
                 (
                     x
-                    for x in elements + references
+                    for x in body + glossary
                     if x["type"] == element_name[0] and str(x["id"]) == element_name[1]
                 ),
                 None,
