@@ -2,3 +2,6 @@ temp/**
 out/**
 *.pyc
 *.code-workspace
+*.json
+*.html
+*.htm

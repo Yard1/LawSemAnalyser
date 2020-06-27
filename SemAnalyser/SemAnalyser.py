@@ -1,32 +1,14 @@
 # coding: UTF-8
-import tempfile
-import os
-import io
-import sys
-import pprint
-from xml.etree import ElementTree as ET
-from io import StringIO, BytesIO
+import codecs
 import collections
-import string
-import regex as re
-from subprocess import Popen
-import chardet
-from bs4 import BeautifulSoup, NavigableString, UnicodeDammit
-import codecs
-
-import regex as re
-import codecs
-import os
-from pprint import pprint
-from typing import Generator
-from enum import Enum, auto
-from pathlib import Path
-import shutil
-
 import json
-import subprocess
-from tqdm import tqdm
+import os
+import shutil
+import tempfile
 import docker
+import regex as re
+from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 from HTMLExtractor import HTMLExtractor
 
