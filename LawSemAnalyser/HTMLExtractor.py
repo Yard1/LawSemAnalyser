@@ -175,7 +175,6 @@ class HTMLExtractor(object):
                 )
                 for article in articles:
                     links = article.find_all("a")
-
                     element = {
                         "type": "article",
                         "id": article.attrs["data-id"],
@@ -183,6 +182,19 @@ class HTMLExtractor(object):
                         "links": [],
                     }
                     body.append(element)
+
+            paragraphs = section.find("div", "block").find_all(
+                attrs={"class": "unit_para"}, recursive=False
+            )
+            for paragraph in paragraphs:
+                links = paragraph.find_all("a")
+                element = {
+                    "type": "paragraph",
+                    "id": paragraph.attrs["data-id"],
+                    "content": [paragraph],
+                    "links": [],
+                }
+                body.append(element)
 
             glossary_html = section.find("div", "gloss-section").find_all(
                 "div", attrs={"class": "gloss"}, recursive=False
@@ -213,9 +225,9 @@ class HTMLExtractor(object):
                     if isinstance(child, NavigableString):
                         continue
                     for link in child.find_all("a"):
-                        external = False
+                        external = True
                         if link.attrs["href"][0] == "#":
-                            external = True
+                            external = False
                             address = link.attrs["href"][1:]
                         else:
                             address = link.attrs["href"]
