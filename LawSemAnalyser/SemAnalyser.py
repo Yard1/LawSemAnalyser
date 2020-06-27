@@ -112,7 +112,7 @@ class SemAnalyser(object):
         with codecs.open(f"temp/{filename}.txt", "w", encoding="utf8") as f:
             f.write(re.sub(r"_REP_\w+", "", text.strip()).strip())
 
-    def _append_liner2_output(self, element, liner2_output):
+    def _append_liner2_output(self, element: dict, liner2_output: dict):
         try:
             if (
                 "liner2" in element

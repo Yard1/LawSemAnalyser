@@ -8,7 +8,6 @@ class HTMLExtractor(object):
     PATTERN_CLEAN_HMTL = re.compile(r"<.*?>")
     PATTERN_WHITESPACE = re.compile(r"(\s|\r|\n)+")
     PATTERN_HREF_REFERENCE = re.compile(r"<a\s+href\s*=\s*\"#([^\"]+?)\".*?<\/a>")
-
     PATTERN_EU_DOC = re.compile(r"href\s*=\s*\".*?eur-lex\.europa\.eu")
 
     TEMPLATES = ["title", "introduction", "chapter", "subchapter", "article", "ref"]
@@ -114,7 +113,8 @@ class HTMLExtractor(object):
         return
 
     class LawDoc:
-        def __init__(self, soup: BeautifulSoup, extractor):
+        def __init__(self, soup: BeautifulSoup, extractor: HTMLExtractor):
+            self.type = None
             self.soup = soup
             self.extractor = extractor
             self.result = {
@@ -149,7 +149,7 @@ class HTMLExtractor(object):
                     self.pos,
                 )
 
-        def __init__(self, soup: BeautifulSoup, extractor):
+        def __init__(self, soup: BeautifulSoup, extractor: HTMLExtractor):
             self.type = "Polish"
             super().__init__(soup, extractor)
 
@@ -277,7 +277,7 @@ class HTMLExtractor(object):
                         yield law
 
     class EULawDoc(LawDoc):
-        def __init__(self, soup: BeautifulSoup, extractor):
+        def __init__(self, soup: BeautifulSoup, extractor: HTMLExtractor):
             self.type = "EU"
             super().__init__(soup, extractor)
 
@@ -430,10 +430,9 @@ class HTMLExtractor(object):
                 )
                 reference["links"] = [str(x) for x in reference["links"][0] if x]
 
-    def _replace_bad_chars(self, text: str) -> str:
-        for k, v in self.BAD_CHARS_TO_REPLACE.items():
-            text = text.replace(k, v)
-        return text
+    def extract_html(self, soup: BeautifulSoup) -> LawDoc:
+        law_doc = self._get_law_doc(soup)
+        return law_doc
 
     def _get_law_doc(self, soup: BeautifulSoup) -> LawDoc:
         if self.PATTERN_EU_DOC.search(str(soup)):
@@ -442,9 +441,10 @@ class HTMLExtractor(object):
             law_doc = self.PolishLawDoc(soup, self)
         return law_doc
 
-    def extract_html(self, soup: BeautifulSoup) -> LawDoc:
-        law_doc = self._get_law_doc(soup)
-        return law_doc
+    def _replace_bad_chars(self, text: str) -> str:
+        for k, v in self.BAD_CHARS_TO_REPLACE.items():
+            text = text.replace(k, v)
+        return text
 
     def _clean_html(self, html_string: str) -> str:
         return self._replace_bad_chars(

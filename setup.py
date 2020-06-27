@@ -14,7 +14,7 @@ from shutil import rmtree
 from setuptools import find_packages, setup, Command
 
 # Package meta-data.
-NAME = 'SemAnalyser'
+NAME = 'LawSemAnalyser'
 DESCRIPTION = 'Package for semantic analysis of Polish and EU law texts.'
 URL = 'https://github.com/Yard1'
 EMAIL = 'antoni.baum@protonmail.com'
