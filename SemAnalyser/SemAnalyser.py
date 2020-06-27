@@ -41,9 +41,9 @@ class SemAnalyser(object):
         if os.path.exists(self.temp_path):
             shutil.rmtree(self.temp_path)
         os.makedirs(self.temp_path)
-         if os.path.exists(self.liner2_output_path):
+        if os.path.exists(self.liner2_output_path):
             shutil.rmtree(self.liner2_output_path)
-         os.makedirs(self.liner2_output_path)
+        os.makedirs(self.liner2_output_path)
         self.docker_client = docker.from_env()
         # self.docker_client.images.pull(docker_image)
 
