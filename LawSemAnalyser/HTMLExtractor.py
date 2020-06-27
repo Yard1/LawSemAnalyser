@@ -122,6 +122,23 @@ class HTMLExtractor(object):
         def _extract(self):
             return None
 
+        def _create_element(
+            self, type_str: str, id_str: str, content=None, links=None
+        ) -> dict:
+            return {
+                "type": type_str,
+                "id": id_str,
+                "content": content if content else [],
+                "links": links if links else [],
+            }
+
+        def _create_link(self, text: str, address: str, is_external: bool) -> dict:
+            return {
+                "text": text,
+                "address": address,
+                "is_external": is_external,
+            }
+
     class PolishLawDoc(LawDoc):
         def __init__(self, soup: BeautifulSoup, extractor):
             self.type = "Polish"
@@ -133,41 +150,31 @@ class HTMLExtractor(object):
             soup = self.soup.find("body")
 
             section = soup.find("h1")
-            title_element = []
-            introduction_element = []
+            title = []
+            subtitle = []
             for child in section.children:
-                title_element.append(child.contents[0])
+                title.append(child.contents[0])
                 if len(child.contents) > 1:
-                    introduction_element.append(child.contents[1])
-            element = {
-                "type": "title",
-                "id": 0,
-                "content": title_element,
-                "links": [],
-            }
-            body.append(element)
-            element = {
-                "type": "introduction",
-                "id": 0,
-                "content": introduction_element,
-                "links": [],
-            }
-            body.append(element)
+                    subtitle.append(child.contents[1])
+            body.append(self._create_element("title", "0", title))
+            body.append(self._create_element("subtitle", "0", subtitle))
 
             sections = soup.find_all("section", id=re.compile(r"part_[0-9]+"))
             section = sections[0]
-            chapters = section.find("div", "block").find_all(
-                attrs={"class": "unit_chpt"}, recursive=False
-            )
+            block = section.find("div", "block")
+
+            introduction = [
+                section.find("h2", attrs={"class": "part"}),
+                block.find("div", attrs={"class": "pro-text"}),
+            ]
+            body.append(self._create_element("introduction", "0", introduction))
+
+            chapters = block.find_all(attrs={"class": "unit_chpt"}, recursive=False)
             for chapter in chapters:
-                header = chapter.find_all("p", recursive=False)
-                element = {
-                    "type": "chapter",
-                    "id": chapter.attrs["data-id"],
-                    "content": list(header),
-                    "links": [],
-                }
-                body.append(element)
+                header = list(chapter.find_all("p", recursive=False))
+                body.append(
+                    self._create_element("chapter", chapter.attrs["data-id"], header)
+                )
                 div_inner = chapter.find("div")
                 articles = div_inner.find_all(
                     lambda x: x.has_attr("class") and "unit_arti" in x["class"],
@@ -175,70 +182,59 @@ class HTMLExtractor(object):
                 )
                 for article in articles:
                     links = article.find_all("a")
-                    element = {
-                        "type": "article",
-                        "id": article.attrs["data-id"],
-                        "content": [article],
-                        "links": [],
-                    }
-                    body.append(element)
+                    body.append(
+                        self._create_element(
+                            "article", article.attrs["data-id"], [article]
+                        )
+                    )
 
             paragraphs = section.find("div", "block").find_all(
                 attrs={"class": "unit_para"}, recursive=False
             )
             for paragraph in paragraphs:
                 links = paragraph.find_all("a")
-                element = {
-                    "type": "paragraph",
-                    "id": paragraph.attrs["data-id"],
-                    "content": [paragraph],
-                    "links": [],
-                }
-                body.append(element)
+                body.append(
+                    self._create_element(
+                        "paragraph", paragraph.attrs["data-id"], [paragraph]
+                    )
+                )
 
             glossary_html = section.find("div", "gloss-section").find_all(
                 "div", attrs={"class": "gloss"}, recursive=False
             )
             for gloss in glossary_html:
-                element = {
-                    "type": "gloss",
-                    "id": gloss.attrs["id"],
-                    "content": gloss.contents,
-                    "links": [],
-                }
-                glossary.append(element)
+                glossary.append(
+                    self._create_element("gloss", gloss.attrs["id"], gloss.contents)
+                )
 
             appendices = sections[1:] if len(sections) > 1 else []
 
             for appendix in appendices:
                 appendix = appendix.find("div", attrs={"class": "part"})
-                element = {
-                    "type": "appendix",
-                    "id": appendix.attrs["id"],
-                    "content": [appendix],
-                    "links": [],
-                }
-                body.append(element)
+                body.append(
+                    self._create_element("appendix", appendix.attrs["id"], [appendix])
+                )
 
             for element in body + glossary:
                 for child in element["content"]:
                     if isinstance(child, NavigableString):
                         continue
                     for link in child.find_all("a"):
-                        external = True
+                        is_external = True
                         if link.attrs["href"][0] == "#":
-                            external = False
+                            is_external = False
                             address = link.attrs["href"][1:]
                         else:
                             address = link.attrs["href"]
+                        print(element, link)
+
                         element["links"].append(
-                            {
-                                "text": self.extractor._clean_html(link),
-                                "address": address,
-                                "is_external": external,
-                            }
+                            self._create_link(
+                                self.extractor._clean_html(link), address, is_external
+                            )
                         )
             self.html_result["document"]["body"] = body.copy()
+            self.html_result["document"]["glossary"] = glossary.copy()
             for element in body + glossary:
                 element["content"] = " ".join(
                     [
