@@ -226,15 +226,15 @@ class HTMLExtractor(object):
                             address = link.attrs["href"][1:]
                         else:
                             address = link.attrs["href"]
-                        print(element, link)
-
                         element["links"].append(
                             self._create_link(
                                 self.extractor._clean_html(link), address, is_external
                             )
                         )
+
             self.html_result["document"]["body"] = body.copy()
             self.html_result["document"]["glossary"] = glossary.copy()
+
             for element in body + glossary:
                 element["content"] = " ".join(
                     [
