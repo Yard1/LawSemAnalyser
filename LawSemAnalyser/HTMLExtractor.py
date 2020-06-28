@@ -219,7 +219,12 @@ class HTMLExtractor(object):
                 for child in element["content"]:
                     if isinstance(child, NavigableString):
                         continue
-                    for link in child.find_all("a"):
+                    links = list(child.find_all("a"))
+                    if child.name == "a":
+                        links.append(child)
+                    for link in links:
+                        if not link.has_attr("href"):
+                            continue
                         is_external = True
                         if link.attrs["href"][0] == "#":
                             is_external = False
