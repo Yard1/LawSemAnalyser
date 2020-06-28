@@ -145,9 +145,7 @@ class SemAnalyser(object):
                 print(f"{name} doesn't match any html file")
                 continue
             element_name = name.replace(current_html_file, "", 1)[1:-9].split(".")
-            print(element_name)
             element_name = (element_name[0], element_name[1])
-            print(element_name)
             body = self.html_data[current_html_file].result["document"]["body"]
             glossary = self.html_data[current_html_file].result["document"]["glossary"]
             element = next(
