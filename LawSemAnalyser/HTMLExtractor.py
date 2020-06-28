@@ -251,6 +251,15 @@ class HTMLExtractor(object):
                     ]
                 )
 
+        def _create_link(self, text: str, address: str, is_external: bool) -> dict:
+            if is_external and address.startswith("/api"):
+                address = address.replace("/api", "http://isap.sejm.gov.pl/api", 1)
+            return {
+                "text": text,
+                "address": address,
+                "is_external": is_external,
+            }
+
     def extract_html(self, soup: BeautifulSoup) -> LawDoc:
         law_doc = self._get_law_doc(soup)
         return law_doc
