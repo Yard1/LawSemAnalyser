@@ -265,7 +265,6 @@ class HTMLExtractor(object):
                 self.PATTERN_WHITESPACE,
                 " ",
                 re.sub(
-                    self.PATTERN_CLEAN_HMTL, "", re.sub("&nbsp;", " ", str(html_string))
-                ),
+                    self.PATTERN_CLEAN_HMTL, "", str(html_string))
+                ).strip(),
             ).strip()
-        )

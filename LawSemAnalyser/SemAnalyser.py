@@ -47,7 +47,7 @@ class SemAnalyser(object):
         self.docker_client = docker.from_env()
         # self.docker_client.images.pull(docker_image)
 
-    def analyseDocs(self):
+    def analyse_docs(self):
         self._prepare_docs()
         self._run_liner2()
         self._load_liner2_output()
