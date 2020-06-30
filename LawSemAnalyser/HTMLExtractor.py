@@ -7,10 +7,6 @@ from bs4 import BeautifulSoup, NavigableString
 class HTMLExtractor(object):
     PATTERN_CLEAN_HMTL = re.compile(r"<.*?>")
     PATTERN_WHITESPACE = re.compile(r"(\s|\r|\n)+")
-    PATTERN_HREF_REFERENCE = re.compile(r"<a\s+href\s*=\s*\"#([^\"]+?)\".*?<\/a>")
-    PATTERN_EU_DOC = re.compile(r"href\s*=\s*\".*?eur-lex\.europa\.eu")
-
-    TEMPLATES = ["title", "introduction", "chapter", "subchapter", "article", "ref"]
 
     BAD_CHARS_TO_REPLACE = {
         "\u00ab": '"',  # left-pointing double angle quotation mark
@@ -113,286 +109,138 @@ class HTMLExtractor(object):
         return
 
     class LawDoc:
-        def __init__(self, soup: BeautifulSoup, extractor: HTMLExtractor):
-            self.type = None
+        def __init__(self, soup: BeautifulSoup, extractor):
             self.soup = soup
             self.extractor = extractor
             self.result = {
                 "type": self.type,
-                "document": {"elements": [], "references": []},
+                "document": {"body": [], "glossary": []},
             }
+            self.html_result = self.result.copy()
             self._extract()
 
         def _extract(self):
             return None
 
+        def _create_element(
+            self, type_str: str, id_str: str, content=None, links=None
+        ) -> dict:
+            return {
+                "type": type_str,
+                "id": id_str,
+                "content": content if content else [],
+                "links": links if links else [],
+            }
+
+        def _create_link(self, text: str, address: str, is_external: bool) -> dict:
+            return {
+                "text": text,
+                "address": address,
+                "is_external": is_external,
+            }
+
     class PolishLawDoc(LawDoc):
-        PATTERN = r"Dz\.\s*U\..*?$"
-        PATTERN_YEAR = r"(z ([0-9]{4}) r\..*?)(?=z [0-9]{4} r\.|$)"
-        PATTERN_NR_GROUP = r"Nr [0-9]+.*?(?=Nr|$|z [0-9]{4} r)"
-        PATTERN_NR = r"Nr ([0-9]+)"
-        PATTERN_POZ = r"(?<![\S\[])([0-9]+)"
-        PATTERN_RE = re.compile(
-            PATTERN, re.IGNORECASE | re.MULTILINE | re.DOTALL | re.VERBOSE
-        )
-
-        class LawEntry:
-            def __init__(self, year, pos, no=None):
-                self.year = year
-                self.pos = pos
-                self.no = no
-
-            def __str__(self) -> str:
-                return "Dz. U. z %s r.%s poz. %s" % (
-                    self.year,
-                    " Nr %s" % self.no if self.no else "",
-                    self.pos,
-                )
-
-        def __init__(self, soup: BeautifulSoup, extractor: HTMLExtractor):
+        def __init__(self, soup: BeautifulSoup, extractor):
             self.type = "Polish"
             super().__init__(soup, extractor)
 
         def _extract(self):
-            current_element = []
-            current_name = ""
-            refs_flag = False
-            title_done = False
-            in_body = False
-            last_child = None
-            references_temp = []
-            references = self.result["document"]["references"]
-            elements = self.result["document"]["elements"]
-            template_counters = dict((k, 1) for k in self.extractor.TEMPLATES)
-            for child in self.soup.recursiveChildGenerator():
-                just_text = self.extractor._clean_html(child)
-                if not isinstance(child, NavigableString) and child.name == "body":
-                    in_body = True
-                attrs = getattr(child, "attrs", None)
-                if attrs:
-                    if "href" in attrs:
-                        references_temp.append(attrs["href"][1:])
-                    if (
-                        child.name == "div"
-                        and "id" in attrs
-                        and "_%s" % attrs["id"] in references_temp
-                    ):
-                        refs_flag = True
-                        element = {
-                            "type": "ref",
-                            "id": attrs["id"],
-                            "content": just_text,
-                            "links": [],
-                        }
-                        references.append(element)
-                    elif not refs_flag and child.name == "a" and "href" in attrs:
-                        ref = re.search(
-                            r"<a\s+href\s*=\s*\"#([^\"]+?)\".*?<\/a>",
-                            str(child),
-                            re.DOTALL | re.IGNORECASE,
-                        )
-                        if ref:
-                            ref_string = "_REF%s" % ref.group(1)
-                            child.string = ref_string
-                elif in_body and not refs_flag and isinstance(child, NavigableString):
-                    if not title_done and re.match(r"Ustawa", just_text, re.IGNORECASE):
-                        current_name = "title"
-                        current_element = []
-                        element = {
-                            "type": current_name,
-                            "id": 0,
-                            "content": current_element,
-                            "refs": [],
-                        }
-                        elements.append(element)
-                        title_done = True
-                    elif re.match(
-                        r"(Rozdział [0-9]+)|(Dział [0-9]+)", just_text, re.IGNORECASE
-                    ):
-                        current_name = "chapter"
-                        current_element = []
-                        element = {
-                            "type": current_name,
-                            "id": template_counters[current_name],
-                            "content": current_element,
-                            "refs": [],
-                        }
-                        elements.append(element)
-                        template_counters[current_name] += 1
-                    elif re.match(
-                        r"(Art\. [0-9]+\..*)|(Artykuł [0-9]+\..*)",
-                        just_text,
-                        re.IGNORECASE,
-                    ):
-                        current_name = "article"
-                        current_element = []
-                        element = {
-                            "type": current_name,
-                            "id": template_counters[current_name],
-                            "content": current_element,
-                            "refs": [],
-                        }
-                        elements.append(element)
-                        template_counters[current_name] += 1
-                    current_element.append(just_text)
-            for element in elements:
-                element["content"] = " ".join(
-                    [x for x in element["content"] if x != ""]
+            glossary = self.result["document"]["glossary"]
+            body = self.result["document"]["body"]
+            soup = self.soup.find("body")
+
+            section = soup.find("h1")
+            title = []
+            subtitle = []
+            for child in section.children:
+                title.append(child.contents[0])
+                if len(child.contents) > 1:
+                    subtitle.append(child.contents[1])
+            body.append(self._create_element("title", "0", title))
+            body.append(self._create_element("subtitle", "0", subtitle))
+
+            sections = soup.find_all("section", id=re.compile(r"part_[0-9]+"))
+            section = sections[0]
+            block = section.find("div", "block")
+
+            introduction = [
+                section.find("h2", attrs={"class": "part"}),
+                block.find("div", attrs={"class": "pro-text"}),
+            ]
+            body.append(self._create_element("introduction", "0", introduction))
+
+            chapters = block.find_all(attrs={"class": "unit_chpt"}, recursive=False)
+            for chapter in chapters:
+                header = list(chapter.find_all("p", recursive=False))
+                body.append(
+                    self._create_element("chapter", chapter.attrs["data-id"], header)
                 )
-                for x in re.findall(r"_REF_(\w+)\b", element["content"]):
-                    element["refs"].append(str(x))
-            self._get_link_refs()
+                div_inner = chapter.find("div")
+                articles = div_inner.find_all(
+                    lambda x: x.has_attr("class") and "unit_arti" in x["class"],
+                    recursive=False,
+                )
+                for article in articles:
+                    links = article.find_all("a")
+                    body.append(
+                        self._create_element(
+                            "article", article.attrs["data-id"], [article]
+                        )
+                    )
 
-        def _get_link_refs(self):
-            for reference in self.result["document"]["references"]:
-                reference["links"] = [
-                    "http://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU%s%s%s"
-                    % (x.year, "000" if not x.no else x.no.zfill(3), x.pos.zfill(4))
-                    for x in self._get_references(reference["content"])
-                ]
+            paragraphs = section.find("div", "block").find_all(
+                attrs={"class": "unit_para"}, recursive=False
+            )
+            for paragraph in paragraphs:
+                links = paragraph.find_all("a")
+                body.append(
+                    self._create_element(
+                        "paragraph", paragraph.attrs["data-id"], [paragraph]
+                    )
+                )
 
-        def _get_references(self, text: str) -> Generator:
-            for item in self.PATTERN_RE.findall(text):
-                years = re.findall(self.PATTERN_YEAR, item, overlapped=True)
-                for year in years:
-                    nrs = re.findall(self.PATTERN_NR_GROUP, year[0], overlapped=True)
-                    if len(nrs) > 0:
-                        for n in nrs:
-                            nr = re.search(self.PATTERN_NR, n)
-                            if nr:
-                                poz_str = n.split("poz. ")
-                                pozs = []
-                                for p in poz_str[1:]:
-                                    pozs.extend(re.findall(self.PATTERN_POZ, p))
-                                for p in pozs:
-                                    law = self.LawEntry(year[1], p, nr.group(1))
-                                    yield law
-                    else:
-                        poz_str = year[0].split("poz. ")
-                        pozs = []
-                        for p in poz_str[1:]:
-                            pozs.extend(re.findall(self.PATTERN_POZ, p))
-                    for p in pozs:
-                        law = self.LawEntry(year[1], p)
-                        yield law
+            glossary_html = section.find("div", "gloss-section").find_all(
+                "div", attrs={"class": "gloss"}, recursive=False
+            )
+            for gloss in glossary_html:
+                glossary.append(
+                    self._create_element("gloss", gloss.attrs["id"], gloss.contents)
+                )
 
-    class EULawDoc(LawDoc):
-        def __init__(self, soup: BeautifulSoup, extractor: HTMLExtractor):
-            self.type = "EU"
-            super().__init__(soup, extractor)
+            appendices = sections[1:] if len(sections) > 1 else []
 
-        def _extract(self):
-            current_element = []
-            current_name = ""
-            refs_flag = False
-            title_done = False
-            in_body = False
-            last_child = None
-            references_temp = []
-            references = self.result["document"]["references"]
-            elements = self.result["document"]["elements"]
-            last_chapter = None
-            template_counters = dict((k, 1) for k in self.extractor.TEMPLATES)
-            soup = self.soup.find("div", {"id": "docHtml"})
-            soup = soup.find("div")
-            for child in self.soup.recursiveChildGenerator():
-                just_text = self.extractor._clean_html(child)
-                attrs = getattr(child, "attrs", None)
-                if child.name == "p" and attrs and "class" in attrs:
-                    if "doc-ti" in attrs["class"] and not current_name == "title":
-                        current_name = "title"
-                        current_element = []
-                        element = {
-                            "type": current_name,
-                            "id": 0,
-                            "content": current_element,
-                            "refs": [],
-                        }
-                        elements.append(element)
-                    elif (
-                        not title_done
-                        and "normal" in attrs["class"]
-                        and not current_name == "introduction"
-                    ):
-                        current_name = "introduction"
-                        current_element = []
-                        element = {
-                            "type": current_name,
-                            "id": 0,
-                            "content": current_element,
-                            "refs": [],
-                        }
-                        elements.append(element)
-                        title_done = True
-                    elif "ti-section-1" in attrs["class"]:
-                        if re.match(r"TYTUŁ .*", just_text, re.IGNORECASE):
-                            current_name = "chapter"
-                            current_element = []
-                            element = {
-                                "type": current_name,
-                                "id": template_counters[current_name],
-                                "content": current_element,
-                                "refs": [],
-                            }
-                            last_chapter = element
-                            last_id = 1
-                            elements.append(element)
-                            template_counters[current_name] += 1
+            for appendix in appendices:
+                appendix = appendix.find("div", attrs={"class": "part"})
+                body.append(
+                    self._create_element("appendix", appendix.attrs["id"], [appendix])
+                )
+
+            for element in body + glossary:
+                for child in element["content"]:
+                    if isinstance(child, NavigableString):
+                        continue
+                    links = list(child.find_all("a"))
+                    if child.name == "a":
+                        links.append(child)
+                    for link in links:
+                        if not link.has_attr("href"):
+                            continue
+                        is_external = True
+                        if link.attrs["href"][0] == "#":
+                            is_external = False
+                            address = link.attrs["href"][1:]
                         else:
-                            current_name = "subchapter"
-                            current_element = []
-                            current_id = last_id
-                            last_id += 1
-                            last_chapter_id = last_chapter["id"]
-                            element = {
-                                "type": current_name,
-                                "id": f"{last_chapter_id}.{current_id}",
-                                "content": current_element,
-                                "refs": [],
-                            }
-                            elements.append(element)
-                            template_counters[current_name] += 1
-                    elif "ti-art" in attrs["class"]:
-                        current_name = "article"
-                        current_element = []
-                        element = {
-                            "type": current_name,
-                            "id": template_counters[current_name],
-                            "content": current_element,
-                            "refs": [],
-                        }
-                        elements.append(element)
-                        template_counters[current_name] += 1
-                    elif child.name == "p" and "note" in attrs["class"]:
-                        current_name = "ref"
-                        current_element = []
-                        element = {
-                            "type": current_name,
-                            "id": template_counters[current_name],
-                            "content": current_element,
-                            "links": [],
-                        }
-                        references.append(element)
-                        template_counters[current_name] += 1
-                    current_element.append(child)
-                if current_name == "ref" and not isinstance(child, NavigableString):
-                    current_element = []
-                    references[-1]["links"].append(current_element)
-                    links = [
-                        getattr(x, "attrs", None)["href"] for x in child.find_all("a")
-                    ][-1:]
-                    if len(links) > 0:
-                        current_element.extend(links)
-                if (
-                    not current_name == "ref"
-                    and attrs
-                    and child.name == "span"
-                    and "class" in attrs
-                    and "note-tag" in attrs["class"]
-                ):
-                    if not "*" in child.string:
-                        child.string = "_REF_%s" % just_text
-            for element in elements:
+                            address = link.attrs["href"]
+                        element["links"].append(
+                            self._create_link(
+                                self.extractor._clean_html(link), address, is_external
+                            )
+                        )
+
+            self.html_result["document"]["body"] = body.copy()
+            self.html_result["document"]["glossary"] = glossary.copy()
+
+            for element in body + glossary:
                 element["content"] = " ".join(
                     [
                         x
@@ -402,43 +250,22 @@ class HTMLExtractor(object):
                         if x
                     ]
                 )
-                for x in re.findall(r"_REF_(\w+)\b", element["content"]):
-                    element["refs"].append(str(x))
-                if "subelements" in element:
-                    for subelement in element["subelements"]:
-                        subelement["content"] = " ".join(
-                            [
-                                x
-                                for x in [
-                                    self.extractor._clean_html(y)
-                                    for y in subelement["content"]
-                                ]
-                                if x
-                            ]
-                        )
-                        for x in re.findall(r"_REF_(\w+)\b", subelement["content"]):
-                            subelement["refs"].append(str(x))
-            for reference in references:
-                reference["content"] = " ".join(
-                    [
-                        x
-                        for x in [
-                            self.extractor._clean_html(y) for y in reference["content"]
-                        ]
-                        if x
-                    ]
-                )
-                reference["links"] = [str(x) for x in reference["links"][0] if x]
+
+        def _create_link(self, text: str, address: str, is_external: bool) -> dict:
+            if is_external and address.startswith("/api"):
+                address = address.replace("/api", "http://isap.sejm.gov.pl/api", 1)
+            return {
+                "text": text,
+                "address": address,
+                "is_external": is_external,
+            }
 
     def extract_html(self, soup: BeautifulSoup) -> LawDoc:
         law_doc = self._get_law_doc(soup)
         return law_doc
 
     def _get_law_doc(self, soup: BeautifulSoup) -> LawDoc:
-        if self.PATTERN_EU_DOC.search(str(soup)):
-            law_doc = self.EULawDoc(soup, self)
-        else:
-            law_doc = self.PolishLawDoc(soup, self)
+        law_doc = self.PolishLawDoc(soup, self)
         return law_doc
 
     def _replace_bad_chars(self, text: str) -> str:
@@ -452,7 +279,6 @@ class HTMLExtractor(object):
                 self.PATTERN_WHITESPACE,
                 " ",
                 re.sub(
-                    self.PATTERN_CLEAN_HMTL, "", re.sub("&nbsp;", " ", str(html_string))
-                ),
+                    self.PATTERN_CLEAN_HMTL, "", str(html_string))
+                ).strip(),
             ).strip()
-        )
