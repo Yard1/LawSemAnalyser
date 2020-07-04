@@ -5,3 +5,4 @@ out/**
 *.json
 *.html
 *.htm
+!example_html/*
