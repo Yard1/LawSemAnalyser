@@ -7,7 +7,7 @@
 
 ## Installation
 
-Run `setup.py` to install the package.
+Run `Python/setup.py` to install the package.
 
 ## Quickstart
 
