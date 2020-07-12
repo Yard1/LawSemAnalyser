@@ -6,3 +6,4 @@ out/**
 *.html
 *.htm
 !example_html/*
+!example_output/*
