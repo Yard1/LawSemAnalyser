@@ -16,22 +16,26 @@ from .HTMLExtractor import HTMLExtractor
 class SemAnalyser(object):
     def __init__(
         self,
-        data_path: str,
+        output_path: str,
         html_docs_path: str,
         html_extractor=HTMLExtractor(),
         temp_path="temp",
-        output_path="out",
-        json_output_path=os.path.join("out", "json"),
-        liner2_output_path=os.path.join("out", "liner2"),
+        json_output_path=None,
+        liner2_output_path=None,
         docker_image="yard1/liner2-cli:latest",
     ):
-        self.data_path = data_path
+        self.output_path = output_path
         self.html_docs_path = html_docs_path
         self.html_extractor = html_extractor
         self.temp_path = temp_path
-        self.output_path = output_path
-        self.json_output_path = json_output_path
-        self.liner2_output_path = liner2_output_path
+        if not json_output_path:
+            self.json_output_path = os.path.join(self.output_path, "json")
+        else:
+            self.json_output_path = json_output_path
+        if not liner2_output_path:
+            self.liner2_output_path = os.path.join(self.output_path, "liner2")
+        else:
+            self.liner2_output_path = liner2_output_path
         self.docker_image = docker_image
         if not os.path.exists(self.output_path):
             os.makedirs(self.output_path)
@@ -45,7 +49,7 @@ class SemAnalyser(object):
            shutil.rmtree(self.liner2_output_path)
         os.makedirs(self.liner2_output_path)
         self.docker_client = docker.from_env()
-        # self.docker_client.images.pull(docker_image)
+        self.docker_client.images.pull(docker_image)
 
     def analyse_docs(self):
         self._prepare_docs()
