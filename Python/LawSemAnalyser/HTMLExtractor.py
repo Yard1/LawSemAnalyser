@@ -139,9 +139,9 @@ class HTMLExtractor(object):
                 "is_external": is_external,
             }
 
-    class PolishLawDoc(LawDoc):
+    class ISAPLawDoc(LawDoc):
         def __init__(self, soup: BeautifulSoup, extractor):
-            self.type = "Polish"
+            self.type = "ISAP"
             super().__init__(soup, extractor)
 
         def _extract(self):
@@ -265,7 +265,7 @@ class HTMLExtractor(object):
         return law_doc
 
     def _get_law_doc(self, soup: BeautifulSoup) -> LawDoc:
-        law_doc = self.PolishLawDoc(soup, self)
+        law_doc = self.ISAPLawDoc(soup, self)
         return law_doc
 
     def _replace_bad_chars(self, text: str) -> str:

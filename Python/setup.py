@@ -15,7 +15,7 @@ from setuptools import find_packages, setup, Command
 
 # Package meta-data.
 NAME = 'LawSemAnalyser'
-DESCRIPTION = 'Package for semantic analysis of Polish texts.'
+DESCRIPTION = 'Package for semantic analysis of law texts.'
 URL = 'https://github.com/Yard1/LawSemAnalyser'
 EMAIL = 'antoni.baum@protonmail.com'
 AUTHOR = 'Antoni Baum'
