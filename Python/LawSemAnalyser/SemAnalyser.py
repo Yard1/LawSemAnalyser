@@ -19,7 +19,7 @@ class SemAnalyser(object):
         output_path: str,
         html_docs_path: str,
         html_extractor=HTMLExtractor(),
-        temp_path="temp",
+        temp_path=None,
         json_output_path=None,
         liner2_output_path=None,
         docker_image="yard1/liner2-cli:latest",
@@ -36,6 +36,10 @@ class SemAnalyser(object):
             self.liner2_output_path = os.path.join(self.output_path, "liner2")
         else:
             self.liner2_output_path = liner2_output_path
+        if not temp_path:
+            self.temp_path = os.path.join(self.output_path, "temp")
+        else:
+            self.temp_path = temp_path
         self.docker_image = docker_image
         if not os.path.exists(self.output_path):
             os.makedirs(self.output_path)
