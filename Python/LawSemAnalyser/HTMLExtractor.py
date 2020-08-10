@@ -318,7 +318,7 @@ class HTMLExtractor(object):
                     current_elements.append(tag)
 
             def clean_content(content):
-                return [" ".join([get_clean_text(x) for x in content]).strip()]
+                return " ".join([get_clean_text(x) for x in content]).strip()
 
             body_html = [
                 self._create_element(name, id, content)
