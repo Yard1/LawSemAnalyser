@@ -2,6 +2,8 @@
 from typing import Generator
 import regex as re
 from bs4 import BeautifulSoup, NavigableString
+from copy import copy
+from collections import defaultdict
 
 
 class HTMLExtractor(object):
@@ -132,11 +134,12 @@ class HTMLExtractor(object):
                 "links": links if links else [],
             }
 
-        def _create_link(self, text: str, address: str, is_external: bool) -> dict:
+        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
             return {
                 "text": text,
                 "address": address,
                 "is_external": is_external,
+                "is_generated": is_generated,
             }
 
     class ISAPLawDoc(LawDoc):
@@ -251,21 +254,189 @@ class HTMLExtractor(object):
                     ]
                 )
 
-        def _create_link(self, text: str, address: str, is_external: bool) -> dict:
+        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
             if is_external and address.startswith("/api"):
                 address = address.replace("/api", "http://isap.sejm.gov.pl/api", 1)
             return {
                 "text": text,
                 "address": address,
                 "is_external": is_external,
+                "is_generated": is_generated
             }
+
+    class GenericPolishLawDoc(LawDoc):
+        def __init__(self, soup: BeautifulSoup, extractor):
+            self.type = "GenericPolish"
+            super().__init__(soup, extractor)
+
+        def _extract(self):
+            glossary = self.result["document"]["glossary"]
+            body = self.result["document"]["body"]
+            soup = self.soup.find("body")
+
+            if len(list(soup.find_all(recursive=False))) == 1:
+                soup = soup.find("div")
+
+            body_html = copy(soup)
+            body_html.find_all(recursive=False)[-1].decompose()
+            body_html = body_html.find_all("p", attrs={"class": True})
+
+            def get_clean_text(tag):
+                if not isinstance(tag, NavigableString):
+                    tag = tag.get_text(" ", strip=True)
+                return self.extractor._clean_html(tag)
+
+            elements = []
+            current_elements = []
+
+            for tag in body_html:
+                clean_tag = get_clean_text(tag)
+                if clean_tag.lower() == "ustawa":
+                    elements.append(["title", "0", []])
+                    current_elements = elements[-1][-1]
+                    elements.append(["subtitle", "0", []])
+                else:
+                    chapter_match = re.match(
+                        r"Rozdział ([0-9]+)", clean_tag, re.IGNORECASE
+                    )
+                    article_match = re.match(
+                        r"Art\. ([0-9]+)\.", clean_tag, re.IGNORECASE
+                    )
+                    appendix_match = re.match(
+                        r"Załącznik nr ([0-9]+)", clean_tag, re.IGNORECASE
+                    )
+                    if chapter_match:
+                        elements.append(["chapter", chapter_match.group(1), []])
+                        current_elements = elements[-1][-1]
+                    elif article_match:
+                        elements.append(["article", article_match.group(1), []])
+                        current_elements = elements[-1][-1]
+                    elif appendix_match:
+                        elements.append(["appendix", appendix_match.group(1), []])
+                        current_elements = elements[-1][-1]
+                if not re.match(r"Załączniki do ustawy z dnia.*", clean_tag):
+                    current_elements.append(tag)
+
+            def clean_content(content):
+                return [" ".join([get_clean_text(x) for x in content]).strip()]
+
+            body_html = [
+                self._create_element(name, id, content)
+                for name, id, content in elements
+            ]
+
+            glossary_html = soup.find_all(recursive=False)[-1].find_all(
+                "div", attrs={"id": True}, recursive=False
+            )
+            glossary_html = [
+                self._create_element("gloss", x.attrs["id"], x) for x in glossary_html
+            ]
+
+            for element in body_html + glossary_html:
+                for child in element["content"]:
+                    if isinstance(child, NavigableString):
+                        continue
+                    links = list(child.find_all("a"))
+                    if child.name == "a":
+                        links.append(child)
+                    for link in links:
+                        if not link.has_attr("href"):
+                            continue
+                        is_external = True
+                        if link.attrs["href"][0] == "#":
+                            is_external = False
+                            address = link.attrs["href"][1:]
+                            if address[0] == "_":
+                                address = address[1:]
+                        else:
+                            address = link.attrs["href"]
+                        if is_external or not element["type"] == "gloss":
+                            element["links"].append(
+                                self._create_link(
+                                    self.extractor._clean_html(link),
+                                    address,
+                                    is_external,
+                                )
+                            )
+                element["content"] = clean_content(element["content"])
+
+            for element in glossary_html:
+                for child in element["content"]:
+                    for ref in self._get_references(child):
+                        element["links"].append(
+                            self._create_link(
+                                ref.text,
+                                "http://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU%s%s%s" % (ref.year, "000" if not ref.no else ref.no.zfill(3), ref.pos.zfill(4)),
+                                True,
+                                True
+                            )
+                        )
+
+            self.html_result["document"]["body"] = body_html
+            self.html_result["document"]["glossary"] = glossary_html
+
+        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
+            if is_external and address.startswith("/api"):
+                address = address.replace("/api", "http://isap.sejm.gov.pl/api", 1)
+            return {
+                "text": text,
+                "address": address,
+                "is_external": is_external,
+                "is_generated": is_generated
+            }
+
+        class LawEntry():
+            def __init__(self, text, year, pos, no = None):
+                self.text = text
+                self.year = year
+                self.pos = pos
+                self.no = no
+            
+            def __str__(self):
+                return "Dz. U. z %s r.%s poz. %s" % (self.year, " Nr %s" % self.no if self.no else "", self.pos)
+
+
+        def _get_references(self, text: str) -> Generator:
+            PATTERN = r"Dz\.\s*U\..*?$"
+            PATTERN_YEAR = r"(z ([0-9]{4}) r\..*?)(?=z [0-9]{4} r\.|$)"
+            PATTERN_NR_GROUP = r"Nr [0-9]+.*?(?=Nr|$|z [0-9]{4} r)"
+            PATTERN_NR = r"Nr ([0-9]+)"
+            PATTERN_POZ = r"(?<![\S\[])([0-9]+)"
+            PATTERN_RE = re.compile(PATTERN, re.IGNORECASE | re.MULTILINE | re.DOTALL | re.VERBOSE )
+            for item in PATTERN_RE.findall(text):
+                years = re.findall(PATTERN_YEAR, item, overlapped=True)
+                for year in years:
+                    nrs = re.findall(PATTERN_NR_GROUP, year[0], overlapped=True)
+                    if len(nrs) > 0:
+                        for n in nrs:
+                            nr = re.search(PATTERN_NR, n)
+                            if nr:
+                                poz_str = n.split("poz. ")
+                                pozs = []
+                                for p in poz_str[1:]:
+                                    pozs.extend(re.findall(PATTERN_POZ, p))
+                                for p in pozs:
+                                    law = self.LawEntry(item, year[1], p, nr.group(1))
+                                    yield law
+                    else:
+                        poz_str = year[0].split("poz. ")
+                        pozs = []
+                        for p in poz_str[1:]:
+                            pozs.extend(re.findall(PATTERN_POZ, p))
+                    for p in pozs:
+                        law = self.LawEntry(item, year[1], p)
+                        yield law
+                #yield item
 
     def extract_html(self, soup: BeautifulSoup) -> LawDoc:
         law_doc = self._get_law_doc(soup)
         return law_doc
 
     def _get_law_doc(self, soup: BeautifulSoup) -> LawDoc:
-        law_doc = self.ISAPLawDoc(soup, self)
+        if soup.find("link", attrs={"href": "./text_files/ISAP-isap_txt.css"}):
+            law_doc = self.ISAPLawDoc(soup, self)
+        else:
+            law_doc = self.GenericPolishLawDoc(soup, self)
         return law_doc
 
     def _replace_bad_chars(self, text: str) -> str:
@@ -278,7 +449,7 @@ class HTMLExtractor(object):
             re.sub(
                 self.PATTERN_WHITESPACE,
                 " ",
-                re.sub(
-                    self.PATTERN_CLEAN_HMTL, "", str(html_string))
-                ).strip(),
-            ).strip()
+                re.sub(self.PATTERN_CLEAN_HMTL, "", str(html_string)),
+            ).strip(),
+        ).strip()
+
