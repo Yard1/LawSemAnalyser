@@ -117,7 +117,7 @@ class SemAnalyser(object):
                 )
 
     def _save_text_for_liner2(self, text: str, filename: str):
-        with codecs.open(f"temp/{filename}.txt", "w", encoding="utf8") as f:
+        with codecs.open(os.path.join(self.temp_path, f"{filename}.txt"), "w", encoding="utf8") as f:
             f.write(text.strip())
 
     def _append_liner2_output(self, element: dict, liner2_output: dict):
