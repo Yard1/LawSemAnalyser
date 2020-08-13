@@ -72,7 +72,7 @@ class SemAnalyser(object):
         for file_name, data in self.html_data.items():
             path = os.path.join(self.json_output_path, file_name + ".json")
             print("Saving txt file " + path + "...")
-            with codecs.open(path, "w", encoding="utf8") as output_file:
+            with open(path, "w", encoding="utf8") as output_file:
                 json.dump(
                     data.result, output_file, ensure_ascii=False, separators=(",", ":")
                 )
@@ -83,12 +83,12 @@ class SemAnalyser(object):
             print("Reading file " + os.path.join(self.html_docs_path, name) + "...")
             if os.path.isfile(os.path.join(self.html_docs_path, name)):
                 try:
-                    with codecs.open(
+                    with open(
                         os.path.join(self.html_docs_path, name), encoding="utf-8"
                     ) as input_file:
                         html_files[name] = BeautifulSoup(input_file, "lxml")
                 except UnicodeDecodeError:
-                    with codecs.open(
+                    with open(
                         os.path.join(self.html_docs_path, name), encoding="iso-8859-2"
                     ) as input_file:
                         html_files[name] = BeautifulSoup(input_file, "lxml")
@@ -118,7 +118,7 @@ class SemAnalyser(object):
                 )
 
     def _save_text_for_liner2(self, text: str, filename: str):
-        with codecs.open(os.path.join(self.temp_path, f"{filename}.txt"), "w", encoding="utf8") as f:
+        with open(os.path.join(self.temp_path, f"{filename}.txt"), "w", encoding="utf8") as f:
             f.write(text.strip())
 
     def _append_liner2_output(self, element: dict, liner2_output: dict):
@@ -143,7 +143,7 @@ class SemAnalyser(object):
     def _load_liner2_output(self):
         for name in tqdm(sorted(os.listdir(self.liner2_output_path))):
             liner2_output = None
-            with open(os.path.join(self.liner2_output_path, name), "r") as f:
+            with open(os.path.join(self.liner2_output_path, name), "r", encoding="utf8") as f:
                 liner2_output = json.load(f)
             current_html_file = None
             for html_filename in self.html_data.keys():
