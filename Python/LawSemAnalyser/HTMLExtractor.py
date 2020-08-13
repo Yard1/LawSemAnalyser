@@ -134,7 +134,9 @@ class HTMLExtractor(object):
                 "links": links if links else [],
             }
 
-        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
+        def _create_link(
+            self, text: str, address: str, is_external: bool, is_generated: bool = False
+        ) -> dict:
             return {
                 "text": text,
                 "address": address,
@@ -254,14 +256,16 @@ class HTMLExtractor(object):
                     ]
                 )
 
-        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
+        def _create_link(
+            self, text: str, address: str, is_external: bool, is_generated: bool = False
+        ) -> dict:
             if is_external and address.startswith("/api"):
                 address = address.replace("/api", "http://isap.sejm.gov.pl/api", 1)
             return {
                 "text": text,
                 "address": address,
                 "is_external": is_external,
-                "is_generated": is_generated
+                "is_generated": is_generated,
             }
 
     class GenericPolishLawDoc(LawDoc):
@@ -366,35 +370,45 @@ class HTMLExtractor(object):
                         element["links"].append(
                             self._create_link(
                                 ref.text,
-                                "http://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU%s%s%s" % (ref.year, "000" if not ref.no else ref.no.zfill(3), ref.pos.zfill(4)),
+                                "http://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU%s%s%s"
+                                % (
+                                    ref.year,
+                                    "000" if not ref.no else ref.no.zfill(3),
+                                    ref.pos.zfill(4),
+                                ),
                                 True,
-                                True
+                                True,
                             )
                         )
 
             self.html_result["document"]["body"] = body_html
             self.html_result["document"]["glossary"] = glossary_html
 
-        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
+        def _create_link(
+            self, text: str, address: str, is_external: bool, is_generated: bool = False
+        ) -> dict:
             if is_external and address.startswith("/api"):
                 address = address.replace("/api", "http://isap.sejm.gov.pl/api", 1)
             return {
                 "text": text,
                 "address": address,
                 "is_external": is_external,
-                "is_generated": is_generated
+                "is_generated": is_generated,
             }
 
-        class LawEntry():
-            def __init__(self, text, year, pos, no = None):
+        class LawEntry:
+            def __init__(self, text, year, pos, no=None):
                 self.text = text
                 self.year = year
                 self.pos = pos
                 self.no = no
-            
-            def __str__(self):
-                return "Dz. U. z %s r.%s poz. %s" % (self.year, " Nr %s" % self.no if self.no else "", self.pos)
 
+            def __str__(self):
+                return "Dz. U. z %s r.%s poz. %s" % (
+                    self.year,
+                    " Nr %s" % self.no if self.no else "",
+                    self.pos,
+                )
 
         def _get_references(self, text: str) -> Generator:
             PATTERN = r"Dz\.\s*U\..*?$"
@@ -402,7 +416,9 @@ class HTMLExtractor(object):
             PATTERN_NR_GROUP = r"Nr [0-9]+.*?(?=Nr|$|z [0-9]{4} r)"
             PATTERN_NR = r"Nr ([0-9]+)"
             PATTERN_POZ = r"(?<![\S\[])([0-9]+)"
-            PATTERN_RE = re.compile(PATTERN, re.IGNORECASE | re.MULTILINE | re.DOTALL | re.VERBOSE )
+            PATTERN_RE = re.compile(
+                PATTERN, re.IGNORECASE | re.MULTILINE | re.DOTALL | re.VERBOSE
+            )
             for item in PATTERN_RE.findall(text):
                 years = re.findall(PATTERN_YEAR, item, overlapped=True)
                 for year in years:
@@ -426,7 +442,7 @@ class HTMLExtractor(object):
                     for p in pozs:
                         law = self.LawEntry(item, year[1], p)
                         yield law
-                #yield item
+                # yield item
 
     class EURLEXLawDoc(LawDoc):
         def __init__(self, soup: BeautifulSoup, extractor):
@@ -440,11 +456,15 @@ class HTMLExtractor(object):
 
             body_html = soup.find("div", attrs={"id": "docHtml"})
 
-            glossary_html = body_html.find_all("p", attrs={"class": "note"}, recursive=False) + body_html.find_all("p", attrs={"class": "footnote"}, recursive=False)
+            glossary_html = body_html.find_all(
+                "p", attrs={"class": "note"}, recursive=False
+            ) + body_html.find_all("p", attrs={"class": "footnote"}, recursive=False)
             appendices = body_html.find_all("div", attrs={"id": True}, recursive=False)
 
             body_html = body_html.find_all(recursive=False)
-            body_html = [x for x in body_html if not (x in glossary_html or x in appendices)]
+            body_html = [
+                x for x in body_html if not (x in glossary_html or x in appendices)
+            ]
 
             def get_clean_text(tag):
                 if not isinstance(tag, NavigableString):
@@ -464,16 +484,31 @@ class HTMLExtractor(object):
                     else:
                         section_counters[current_section] = 1
                     if current_section == "article":
-                        section_no = re.match(r"Artykuł (\w+)", get_clean_text(current_section_tag)).group(1).strip()
-                    section_no = section_no if section_no else str(section_counters[current_section])
-                    elements.append([current_section, section_no, current_elements.copy()])
+                        section_no = (
+                            re.match(
+                                r"Artykuł (\w+)", get_clean_text(current_section_tag)
+                            )
+                            .group(1)
+                            .strip()
+                        )
+                    section_no = (
+                        section_no
+                        if section_no
+                        else str(section_counters[current_section])
+                    )
+                    elements.append(
+                        [current_section, section_no, current_elements.copy()]
+                    )
                 return []
 
             for tag in body_html:
                 clean_tag = get_clean_text(tag)
                 if tag.has_attr("class"):
                     if tag.name == "p":
-                        if current_section != "title" and ("doc-ti" in tag["class"] or "title-doc-first" in tag["class"]):
+                        if current_section != "title" and (
+                            "doc-ti" in tag["class"]
+                            or "title-doc-first" in tag["class"]
+                        ):
                             current_elements = append_to_elements(current_elements)
                             current_section = "title"
                             current_section_tag = tag
@@ -494,7 +529,10 @@ class HTMLExtractor(object):
                                 current_elements = append_to_elements(current_elements)
                                 current_section = "section"
                                 current_section_tag = tag
-                        elif "ti-art" in tag["class"] or "title-article-norm" in tag["class"]:
+                        elif (
+                            "ti-art" in tag["class"]
+                            or "title-article-norm" in tag["class"]
+                        ):
                             article_match = re.match(r"Artykuł (\w+)", clean_tag)
                             if article_match:
                                 current_elements = append_to_elements(current_elements)
@@ -503,7 +541,11 @@ class HTMLExtractor(object):
                         elif "title-annex-1" in tag["class"]:
                             current_elements = append_to_elements(current_elements)
                             current_section = "appendix"
-                    elif current_section == "title" and tag.name == "div" and "preamble" in tag["class"]:
+                    elif (
+                        current_section == "title"
+                        and tag.name == "div"
+                        and "preamble" in tag["class"]
+                    ):
                         current_elements = append_to_elements(current_elements)
                         current_section = "subtitle"
                         current_section_tag = tag
@@ -519,11 +561,13 @@ class HTMLExtractor(object):
             def clean_content(content):
                 return " ".join([get_clean_text(x) for x in content]).strip()
 
-            body_html += [["appendix", str(i), x.find_all(recursive = False)] for i, x in enumerate(appendices)]
+            body_html += [
+                ["appendix", str(i), x.find_all(recursive=False)]
+                for i, x in enumerate(appendices)
+            ]
 
             body_html = [
-                self._create_element(name, i, content)
-                for name, i, content in elements
+                self._create_element(name, i, content) for name, i, content in elements
             ]
 
             glossary_html_new = []
@@ -545,9 +589,14 @@ class HTMLExtractor(object):
                         element["links"].append(
                             self._create_link(
                                 ref.text,
-                                "https://eur-lex.europa.eu/legal-content/PL/TXT/?uri=OJ:%s:%s:%s:TOC" % (ref.identifier, ref.year, ref.pos.rjust(3,'0')+ref.pos_extra),
+                                "https://eur-lex.europa.eu/legal-content/PL/TXT/?uri=OJ:%s:%s:%s:TOC"
+                                % (
+                                    ref.identifier,
+                                    ref.year,
+                                    ref.pos.rjust(3, "0") + ref.pos_extra,
+                                ),
                                 True,
-                                True
+                                True,
                             )
                         )
 
@@ -582,32 +631,37 @@ class HTMLExtractor(object):
             self.html_result["document"]["body"] = body_html
             self.html_result["document"]["glossary"] = glossary_html
 
-        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
+        def _create_link(
+            self, text: str, address: str, is_external: bool, is_generated: bool = False
+        ) -> dict:
             return {
                 "text": text,
                 "address": address,
                 "is_external": is_external,
-                "is_generated": is_generated
+                "is_generated": is_generated,
             }
 
-        class LawEntry():
-            def __init__(self, text, identifier, pos, day_month, year, pos_extra = ""):
+        class LawEntry:
+            def __init__(self, text, identifier, pos, day_month, year, pos_extra=""):
                 self.text = text
                 self.identifier = identifier
                 self.pos = pos
                 self.day_month = day_month
                 self.year = year
                 self.pos_extra = pos_extra
-            
+
             def __str__(self):
                 return f"Dz.U. {self.identifier} {self.pos}{' '+self.pos_extra if self.pos_extra else ''} z {self.day_month}{self.year}"
 
-
         def _get_references(self, text: str) -> Generator:
-            PATTERN = r"(Dz\.U\. ([A-Z]) ([0-9]+) ([A-Z]?) ?z ([0-9]+\.[0-9]+\.)([0-9]{4}))"
+            PATTERN = (
+                r"(Dz\.U\. ([A-Z]) ([0-9]+) ([A-Z]?) ?z ([0-9]+\.[0-9]+\.)([0-9]{4}))"
+            )
             PATTERN_RE = re.compile(PATTERN)
             for item in PATTERN_RE.findall(text):
-                law = self.LawEntry(item[0], item[1], item[2], item[4], item[5], item[3])
+                law = self.LawEntry(
+                    item[0], item[1], item[2], item[4], item[5], item[3]
+                )
                 yield law
 
     def extract_html(self, soup: BeautifulSoup) -> LawDoc:
@@ -617,11 +671,14 @@ class HTMLExtractor(object):
     def _get_law_doc(self, soup: BeautifulSoup) -> LawDoc:
         if soup.find("link", attrs={"href": "./text_files/ISAP-isap_txt.css"}):
             return self.ISAPLawDoc(soup, self)
-        
+
         head = soup.find("head")
-        if head and any("eurlex" in x["href"] for x in head.find_all("link", attrs={"href": True}, recursive=False)):
-                return self.EURLEXLawDoc(soup, self)
-        
+        if head and any(
+            "eurlex" in x["href"]
+            for x in head.find_all("link", attrs={"href": True}, recursive=False)
+        ):
+            return self.EURLEXLawDoc(soup, self)
+
         return self.GenericPolishLawDoc(soup, self)
 
     def _replace_bad_chars(self, text: str) -> str:
