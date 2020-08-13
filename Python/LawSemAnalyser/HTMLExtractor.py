@@ -1,7 +1,7 @@
 # coding: UTF-8
 from typing import Generator
 import regex as re
-from bs4 import BeautifulSoup, NavigableString
+from bs4 import BeautifulSoup, NavigableString, Tag
 from copy import copy
 from collections import defaultdict
 
@@ -428,16 +428,201 @@ class HTMLExtractor(object):
                         yield law
                 #yield item
 
+    class EURLEXLawDoc(LawDoc):
+        def __init__(self, soup: BeautifulSoup, extractor):
+            self.type = "EURLEX"
+            super().__init__(soup, extractor)
+
+        def _extract(self):
+            glossary = self.result["document"]["glossary"]
+            body = self.result["document"]["body"]
+            soup = self.soup.find("body")
+
+            body_html = soup.find("div", attrs={"id": "docHtml"})
+
+            glossary_html = body_html.find_all("p", attrs={"class": "note"}, recursive=False) + body_html.find_all("p", attrs={"class": "footnote"}, recursive=False)
+            appendices = body_html.find_all("div", attrs={"id": True}, recursive=False)
+
+            body_html = body_html.find_all(recursive=False)
+            body_html = [x for x in body_html if not (x in glossary_html or x in appendices)]
+
+            def get_clean_text(tag):
+                if not isinstance(tag, NavigableString):
+                    tag = tag.get_text(" ", strip=True)
+                return self.extractor._clean_html(tag)
+
+            current_section = ""
+            current_section_tag = None
+            elements = []
+            current_elements = []
+            section_counters = {"title": -1, "subtitle": -1}
+
+            def append_to_elements(current_elements, section_no=""):
+                if current_section:
+                    if current_section in section_counters:
+                        section_counters[current_section] += 1
+                    else:
+                        section_counters[current_section] = 1
+                    if current_section == "article":
+                        section_no = re.match(r"Artykuł (\w+)", get_clean_text(current_section_tag)).group(1).strip()
+                    section_no = section_no if section_no else str(section_counters[current_section])
+                    elements.append([current_section, section_no, current_elements.copy()])
+                return []
+
+            for tag in body_html:
+                clean_tag = get_clean_text(tag)
+                if tag.has_attr("class"):
+                    if tag.name == "p":
+                        if current_section != "title" and ("doc-ti" in tag["class"] or "title-doc-first" in tag["class"]):
+                            current_elements = append_to_elements(current_elements)
+                            current_section = "title"
+                            current_section_tag = tag
+                        elif current_section == "title" and "normal" in tag["class"]:
+                            current_elements = append_to_elements(current_elements)
+                            current_section = "subtitle"
+                            current_section_tag = tag
+                        elif "ti-section-1" in tag["class"]:
+                            if re.match(r"TYTUŁ.*", clean_tag):
+                                current_elements = append_to_elements(current_elements)
+                                current_section = "section_title"
+                                current_section_tag = tag
+                            elif re.match(r"ROZDZIAŁ.*", clean_tag):
+                                current_elements = append_to_elements(current_elements)
+                                current_section = "chapter"
+                                current_section_tag = tag
+                            elif re.match(r"Sekcja.*", clean_tag):
+                                current_elements = append_to_elements(current_elements)
+                                current_section = "section"
+                                current_section_tag = tag
+                        elif "ti-art" in tag["class"] or "title-article-norm" in tag["class"]:
+                            article_match = re.match(r"Artykuł (\w+)", clean_tag)
+                            if article_match:
+                                current_elements = append_to_elements(current_elements)
+                                current_section = "article"
+                                current_section_tag = tag
+                        elif "title-annex-1" in tag["class"]:
+                            current_elements = append_to_elements(current_elements)
+                            current_section = "appendix"
+                    elif current_section == "title" and tag.name == "div" and "preamble" in tag["class"]:
+                        current_elements = append_to_elements(current_elements)
+                        current_section = "subtitle"
+                        current_section_tag = tag
+                    elif tag.name == "div" and "final" in tag["class"]:
+                        current_elements.append(tag)
+                        current_elements = append_to_elements(current_elements)
+                        break
+                    elif "arrow" in tag["class"]:
+                        continue
+
+                current_elements.append(tag)
+
+            def clean_content(content):
+                return " ".join([get_clean_text(x) for x in content]).strip()
+
+            body_html += [["appendix", str(i), x.find_all(recursive = False)] for i, x in enumerate(appendices)]
+
+            body_html = [
+                self._create_element(name, i, content)
+                for name, i, content in elements
+            ]
+
+            glossary_html_new = []
+
+            for x in glossary_html:
+                x_t = x.find("a", attrs={"id": True}, recursive=False)
+                if not x_t:
+                    continue
+                new = self._create_element("gloss", x_t.attrs["id"], x)
+                glossary_html_new.append(new)
+
+            glossary_html = glossary_html_new
+
+            for element in glossary_html:
+                for child in element["content"]:
+                    if not isinstance(child, NavigableString):
+                        continue
+                    for ref in self._get_references(child.strip()):
+                        element["links"].append(
+                            self._create_link(
+                                ref.text,
+                                "https://eur-lex.europa.eu/legal-content/PL/TXT/?uri=OJ:%s:%s:%s:TOC" % (ref.identifier, ref.year, ref.pos.rjust(3,'0')+ref.pos_extra),
+                                True,
+                                True
+                            )
+                        )
+
+            for element in body_html + glossary_html:
+                for child in element["content"]:
+                    if isinstance(child, NavigableString):
+                        continue
+                    links = list(child.find_all("a"))
+                    if child.name == "a":
+                        links.append(child)
+                    for link in links:
+                        if not link.has_attr("href"):
+                            continue
+                        is_external = True
+                        if link.attrs["href"][0] == "#":
+                            is_external = False
+                            address = link.attrs["href"][1:]
+                            if address[0] == "_":
+                                address = address[1:]
+                        else:
+                            address = link.attrs["href"]
+                        if is_external or not element["type"] == "gloss":
+                            element["links"].append(
+                                self._create_link(
+                                    self.extractor._clean_html(link),
+                                    address,
+                                    is_external,
+                                )
+                            )
+                element["content"] = clean_content(element["content"])
+
+            self.html_result["document"]["body"] = body_html
+            self.html_result["document"]["glossary"] = glossary_html
+
+        def _create_link(self, text: str, address: str, is_external: bool, is_generated: bool = False) -> dict:
+            return {
+                "text": text,
+                "address": address,
+                "is_external": is_external,
+                "is_generated": is_generated
+            }
+
+        class LawEntry():
+            def __init__(self, text, identifier, pos, day_month, year, pos_extra = ""):
+                self.text = text
+                self.identifier = identifier
+                self.pos = pos
+                self.day_month = day_month
+                self.year = year
+                self.pos_extra = pos_extra
+            
+            def __str__(self):
+                return f"Dz.U. {self.identifier} {self.pos}{' '+self.pos_extra if self.pos_extra else ''} z {self.day_month}{self.year}"
+
+
+        def _get_references(self, text: str) -> Generator:
+            PATTERN = r"(Dz\.U\. ([A-Z]) ([0-9]+) ([A-Z]?) ?z ([0-9]+\.[0-9]+\.)([0-9]{4}))"
+            PATTERN_RE = re.compile(PATTERN)
+            for item in PATTERN_RE.findall(text):
+                law = self.LawEntry(item[0], item[1], item[2], item[4], item[5], item[3])
+                yield law
+
     def extract_html(self, soup: BeautifulSoup) -> LawDoc:
         law_doc = self._get_law_doc(soup)
         return law_doc
 
     def _get_law_doc(self, soup: BeautifulSoup) -> LawDoc:
         if soup.find("link", attrs={"href": "./text_files/ISAP-isap_txt.css"}):
-            law_doc = self.ISAPLawDoc(soup, self)
-        else:
-            law_doc = self.GenericPolishLawDoc(soup, self)
-        return law_doc
+            return self.ISAPLawDoc(soup, self)
+        
+        head = soup.find("head")
+        if head and any("eurlex" in x["href"] for x in head.find_all("link", attrs={"href": True}, recursive=False)):
+                return self.EURLEXLawDoc(soup, self)
+        
+        return self.GenericPolishLawDoc(soup, self)
 
     def _replace_bad_chars(self, text: str) -> str:
         for k, v in self.BAD_CHARS_TO_REPLACE.items():
