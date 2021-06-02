@@ -36,7 +36,7 @@ REQUIRED = [
     "six==1.15.0",
     "soupsieve==2.0.1",
     "tqdm==4.46.1",
-    "urllib3==1.25.9",
+    "urllib3==1.26.5",
     "websocket-client==0.57.0",
 ]
 
