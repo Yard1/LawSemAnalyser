@@ -30,7 +30,7 @@ REQUIRED = [
     "chardet==3.0.4",
     "docker==4.2.1",
     "idna==2.9",
-    "lxml==4.6.2",
+    "lxml==4.9.1",
     "regex==2020.6.8",
     "requests==2.24.0",
     "six==1.15.0",
