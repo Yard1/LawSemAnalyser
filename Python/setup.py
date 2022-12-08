@@ -26,7 +26,7 @@ VERSION = '0.1.0'
 REQUIRED = [
     "beautifulsoup4==4.9.1",
     "bs4==0.0.1",
-    "certifi==2020.6.20",
+    "certifi==2022.12.7",
     "chardet==3.0.4",
     "docker==4.2.1",
     "idna==2.9",
